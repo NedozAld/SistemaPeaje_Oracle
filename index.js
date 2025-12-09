@@ -1,6 +1,12 @@
 const express = require('express');
 const path = require('path');
 const { Sequelize, QueryTypes } = require('sequelize');
+const oracledb = require('oracledb');
+
+// DB defaults read from environment; keep connection internal to the app
+const DEFAULT_DB_HOST = process.env.DB_HOST || 'localhost';
+const DEFAULT_DB_PORT = process.env.DB_PORT || 1521;
+const DEFAULT_DB_SERVICE = process.env.DB_SERVICE || 'XE';
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -43,15 +49,32 @@ app.get('/', (req, res) => {
 // Ruta principal de consulta con combo box
 app.post('/consulta', async (req, res) => {
   const { usuario, password } = req.body;
-  const sequelize = new Sequelize('XE', usuario, password, {
-    host: 'localhost',
-    dialect: 'oracle',
-    port: 1521,
-    dialectOptions: {
-      connectString: 'localhost/XE'
-    },
-    logging: false
-  });
+  const host = DEFAULT_DB_HOST;
+  const port = DEFAULT_DB_PORT;
+  const service = DEFAULT_DB_SERVICE;
+  const connectString = `${host}:${port}/${service}`;
+  // Try a direct oracledb connection first (supports SYS as SYSDBA)
+  try {
+    const connOpts = { user: usuario, password, connectString };
+    if (String(usuario).toUpperCase() === 'SYS') {
+      connOpts.privilege = oracledb.SYSDBA;
+    }
+    const testConn = await oracledb.getConnection(connOpts);
+    await testConn.close();
+  } catch (err) {
+    // If direct oracledb connect fails, we'll try Sequelize below and show error if it also fails
+    console.warn('oracledb test connection failed:', err && err.message ? err.message : err);
+  }
+
+    const sequelize = new Sequelize(service, usuario, password, {
+      host,
+      dialect: 'oracle',
+      port,
+      dialectOptions: {
+        connectString
+      },
+      logging: false
+    });
 
   try {
     await sequelize.authenticate();
@@ -187,13 +210,16 @@ app.post('/consulta', async (req, res) => {
 // Ruta para mostrar las diferentes vistas
 app.post('/consulta/vista', async (req, res) => {
   const { usuario, password, tipo } = req.body;
-  const sequelize = new Sequelize('XE', usuario, password, {
-    host: 'localhost',
+  const host = DEFAULT_DB_HOST;
+  const port = DEFAULT_DB_PORT;
+  const service = DEFAULT_DB_SERVICE;
+  const connectString = `${host}:${port}/${service}`;
+
+  const sequelize = new Sequelize(service, usuario, password, {
+    host,
     dialect: 'oracle',
-    port: 1521,
-    dialectOptions: {
-      connectString: 'localhost/XE'
-    },
+    port,
+    dialectOptions: { connectString },
     logging: false
   });
 
@@ -205,13 +231,24 @@ app.post('/consulta/vista', async (req, res) => {
 
     if (tipo === 'roles') {
       // CONSULTA DE ROLES DEL USUARIO
-      const roles = await sequelize.query(
-        `SELECT * FROM DBA_ROLE_PRIVS WHERE GRANTEE = :usuario`,
-        {
-          type: QueryTypes.SELECT,
-          replacements: { usuario: usuario.toUpperCase() }
+      let roles = [];
+      try {
+        roles = await sequelize.query(
+          `SELECT * FROM DBA_ROLE_PRIVS WHERE GRANTEE = :usuario`,
+          {
+            type: QueryTypes.SELECT,
+            replacements: { usuario: usuario.toUpperCase() }
+          }
+        );
+      } catch (err) {
+        // Fallback: si no tiene privilegios para DBA_, usar USER_ROLE_PRIVS (devuelve roles del usuario conectado)
+        if (String(err.message || '').includes('ORA-00942')) {
+          const userRoles = await sequelize.query(`SELECT GRANTED_ROLE, ADMIN_OPTION, DEFAULT_ROLE FROM USER_ROLE_PRIVS`, { type: QueryTypes.SELECT });
+          roles = userRoles.map(r => ({ GRANTEE: usuario.toUpperCase(), GRANTED_ROLE: r.GRANTED_ROLE, ADMIN_OPTION: r.ADMIN_OPTION, DEFAULT_ROLE: r.DEFAULT_ROLE }));
+        } else {
+          throw err;
         }
-      );
+      }
 
       titulo = `ROLES ASIGNADOS PARA ${usuario.toUpperCase()}`;
       
@@ -243,13 +280,24 @@ app.post('/consulta/vista', async (req, res) => {
 
     } else if (tipo === 'privilegios') {
       // PRIVILEGIOS DEL USUARIO
-      const privilegios = await sequelize.query(
-        `SELECT * FROM DBA_SYS_PRIVS WHERE GRANTEE = :usuario`,
-        {
-          type: QueryTypes.SELECT,
-          replacements: { usuario: usuario.toUpperCase() }
+      let privilegios = [];
+      try {
+        privilegios = await sequelize.query(
+          `SELECT * FROM DBA_SYS_PRIVS WHERE GRANTEE = :usuario`,
+          {
+            type: QueryTypes.SELECT,
+            replacements: { usuario: usuario.toUpperCase() }
+          }
+        );
+      } catch (err) {
+        // Fallback: si no puede consultar DBA_SYS_PRIVS, usamos SESSION_PRIVS para ver los privilegios efectivos
+        if (String(err.message || '').includes('ORA-00942')) {
+          const sessionPrivs = await sequelize.query(`SELECT PRIVILEGE FROM SESSION_PRIVS`, { type: QueryTypes.SELECT });
+          privilegios = sessionPrivs.map(p => ({ GRANTEE: usuario.toUpperCase(), PRIVILEGE: p.PRIVILEGE, ADMIN_OPTION: null }));
+        } else {
+          throw err;
         }
-      );
+      }
 
       titulo = `PRIVILEGIOS DE SISTEMA PARA ${usuario.toUpperCase()}`;
       
@@ -388,13 +436,16 @@ app.post('/tabla/:tableName', async (req, res) => {
     return res.send(`<h2>Error: Faltan parámetros requeridos</h2>`);
   }
 
-  const sequelize = new Sequelize('XE', usuario, password, {
-    host: 'localhost',
+  const host = DEFAULT_DB_HOST;
+  const port = DEFAULT_DB_PORT;
+  const service = DEFAULT_DB_SERVICE;
+  const connectString = `${host}:${port}/${service}`;
+
+  const sequelize = new Sequelize(service, usuario, password, {
+    host,
     dialect: 'oracle',
-    port: 1521,
-    dialectOptions: {
-      connectString: 'localhost/XE'
-    },
+    port,
+    dialectOptions: { connectString },
     logging: false
   });
 
