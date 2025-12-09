@@ -80,13 +80,23 @@ app.post('/consulta', async (req, res) => {
     await sequelize.authenticate();
     
     // Obtener las tablas disponibles
-    const resultados = await sequelize.query(
-      `SELECT TABLE_NAME, GRANTOR, PRIVILEGE FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`,
-      {
-        type: QueryTypes.SELECT,
-        replacements: { usuario: usuario.toUpperCase() }
-      }
-    );
+    const isSystem = String(usuario).toUpperCase() === 'SYSTEM';
+    let resultados = [];
+    if (isSystem) {
+      // SYSTEM normalmente puede consultar DBA_TABLES; mostramos tablas de todos los owners (excepto Oracle internals)
+      resultados = await sequelize.query(
+        `SELECT OWNER, TABLE_NAME FROM DBA_TABLES WHERE OWNER NOT IN ('SYS','SYSTEM') AND ROWNUM <= 500`,
+        { type: QueryTypes.SELECT }
+      );
+    } else {
+      resultados = await sequelize.query(
+        `SELECT TABLE_NAME, GRANTOR, PRIVILEGE FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`,
+        {
+          type: QueryTypes.SELECT,
+          replacements: { usuario: usuario.toUpperCase() }
+        }
+      );
+    }
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -123,7 +133,6 @@ app.post('/consulta', async (req, res) => {
         <button type="submit" class="view-btn">Ver</button>
       </form>
     </div>
-
     ${resultados.length === 0 ? `
       <div class="alerta">El usuario <b>${usuario}</b> no tiene acceso a ninguna tabla.</div>
     ` : `
@@ -132,26 +141,30 @@ app.post('/consulta', async (req, res) => {
           <tr>
             <th>OWNER</th>
             <th>TABLE_NAME</th>
-            <th>PRIVILEGE</th>
+            <th>ACCIÓN</th>
           </tr>
         </thead>
         <tbody>
-          ${resultados.map(fila => `
+          ${resultados.map(fila => {
+            const owner = fila.GRANTOR || fila.OWNER || '';
+            const table = fila.TABLE_NAME;
+            const privilege = fila.PRIVILEGE || 'SELECT';
+            return `
             <tr>
-              <td>${fila.GRANTOR}</td>
-              <td><strong>${fila.TABLE_NAME}</strong></td>
+              <td>${owner}</td>
+              <td><strong>${table}</strong></td>
               <td>
-                ${fila.PRIVILEGE === 'SELECT' ? `
-                  <form action="/tabla/${encodeURIComponent(fila.TABLE_NAME)}" method="POST" class="action-form">
+                ${privilege === 'SELECT' || isSystem ? `
+                  <form action="/tabla/${encodeURIComponent(table)}" method="POST" class="action-form">
                     <input type="hidden" name="usuario" value="${usuario}">
                     <input type="hidden" name="password" value="${password}">
-                    <input type="hidden" name="owner" value="${fila.GRANTOR}">
+                    <input type="hidden" name="owner" value="${owner}">
                     <button type="submit" class="view-btn" style="width: auto; padding: 0.5rem 1rem;">👁️ Ver</button>
                   </form>
-                ` : `<span style="color: #999;">${fila.PRIVILEGE}</span>`}
+                ` : `<span style="color: #999;">${privilege}</span>`}
               </td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     `}
@@ -327,13 +340,13 @@ app.post('/consulta/vista', async (req, res) => {
 
     } else if (tipo === 'tablas') {
       // CONTENIDO DE LAS TABLAS
-      const tablas = await sequelize.query(
-        `SELECT DISTINCT TABLE_NAME, GRANTOR FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`,
-        {
-          type: QueryTypes.SELECT,
-          replacements: { usuario: usuario.toUpperCase() }
-        }
-      );
+      const isSystem = String(usuario).toUpperCase() === 'SYSTEM';
+      let tablas = [];
+      if (isSystem) {
+        tablas = await sequelize.query(`SELECT OWNER, TABLE_NAME FROM DBA_TABLES WHERE OWNER NOT IN ('SYS','SYSTEM') AND ROWNUM <= 500`, { type: QueryTypes.SELECT });
+      } else {
+        tablas = await sequelize.query(`SELECT DISTINCT TABLE_NAME, GRANTOR FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`, { type: QueryTypes.SELECT, replacements: { usuario: usuario.toUpperCase() } });
+      }
 
       titulo = `TABLAS DISPONIBLES PARA ${usuario.toUpperCase()}`;
       
@@ -349,14 +362,16 @@ app.post('/consulta/vista', async (req, res) => {
           <tbody>`;
         
         tablas.forEach(tabla => {
+          const owner = tabla.GRANTOR || tabla.OWNER || '';
+          const tableName = tabla.TABLE_NAME;
           contenido += `<tr>
-            <td>${tabla.TABLE_NAME}</td>
-            <td>${tabla.GRANTOR}</td>
+            <td>${tableName}</td>
+            <td>${owner}</td>
             <td>
-              <form action="/tabla/${encodeURIComponent(tabla.TABLE_NAME)}" method="POST" style="display:inline;">
+              <form action="/tabla/${encodeURIComponent(tableName)}" method="POST" style="display:inline;">
                 <input type="hidden" name="usuario" value="${usuario}">
                 <input type="hidden" name="password" value="${password}">
-                <input type="hidden" name="owner" value="${tabla.GRANTOR}">
+                <input type="hidden" name="owner" value="${owner}">
                 <button type="submit" class="view-btn" style="width: auto; padding: 0.5rem 1rem;">👁️ Ver Contenido</button>
               </form>
             </td>
@@ -452,7 +467,8 @@ app.post('/tabla/:tableName', async (req, res) => {
   try {
     await sequelize.authenticate();
     const registros = await sequelize.query(
-      `SELECT * FROM "${owner}"."${tableName}" FETCH FIRST 50 ROWS ONLY`,
+      // Use unquoted OWNER.TABLE and uppercase identifiers; SYSTEM often needs unquoted reference
+      `SELECT * FROM ${owner.toUpperCase()}.${tableName.toUpperCase()} FETCH FIRST 50 ROWS ONLY`,
       { type: QueryTypes.SELECT }
     );
 
