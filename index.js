@@ -1,12 +1,6 @@
 const express = require('express');
 const path = require('path');
 const { Sequelize, QueryTypes } = require('sequelize');
-const oracledb = require('oracledb');
-
-// DB defaults read from environment; keep connection internal to the app
-const DEFAULT_DB_HOST = process.env.DB_HOST || 'localhost';
-const DEFAULT_DB_PORT = process.env.DB_PORT || 1521;
-const DEFAULT_DB_SERVICE = process.env.DB_SERVICE || 'XE';
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -49,90 +43,27 @@ app.get('/', (req, res) => {
 // Ruta principal de consulta con combo box
 app.post('/consulta', async (req, res) => {
   const { usuario, password } = req.body;
-  const host = DEFAULT_DB_HOST;
-  const port = DEFAULT_DB_PORT;
-  const service = DEFAULT_DB_SERVICE;
-  const connectString = `${host}:${port}/${service}`;
-  // Try a direct oracledb connection first (supports SYS as SYSDBA)
-  try {
-    const connOpts = { user: usuario, password, connectString };
-    if (String(usuario).toUpperCase() === 'SYS') {
-      connOpts.privilege = oracledb.SYSDBA;
-    }
-    const testConn = await oracledb.getConnection(connOpts);
-    await testConn.close();
-  } catch (err) {
-    // If direct oracledb connect fails, we'll try Sequelize below and show error if it also fails
-    console.warn('oracledb test connection failed:', err && err.message ? err.message : err);
-  }
-
-    const sequelize = new Sequelize(service, usuario, password, {
-      host,
-      dialect: 'oracle',
-      port,
-      dialectOptions: {
-        connectString
-      },
-      logging: false
-    });
+  const sequelize = new Sequelize('XE', usuario, password, {
+    host: 'localhost',
+    dialect: 'oracle',
+    port: 1521,
+    dialectOptions: {
+      connectString: 'localhost/XE'
+    },
+    logging: false
+  });
 
   try {
     await sequelize.authenticate();
     
-    // Obtener las tablas disponibles y privilegios
-    const isSystem = String(usuario).toUpperCase() === 'SYSTEM';
-    let resultados = [];
-    let systemPrivs = [];
-    let systemRoles = [];
-
-    if (isSystem) {
-      // Para SYSTEM mostramos solo tablas de SYS y XDB, y además listamos privilegios y roles de SYSTEM
-      resultados = await sequelize.query(
-        `SELECT OWNER, TABLE_NAME FROM DBA_TABLES WHERE OWNER IN ('SYS','XDB') ORDER BY OWNER, TABLE_NAME`,
-        { type: QueryTypes.SELECT }
-      );
-
-      // Obtener privilegios de sistema asignados a SYSTEM
-      try {
-        systemPrivs = await sequelize.query(
-          `SELECT PRIVILEGE, ADMIN_OPTION FROM DBA_SYS_PRIVS WHERE GRANTEE = 'SYSTEM' ORDER BY PRIVILEGE`,
-          { type: QueryTypes.SELECT }
-        );
-      } catch (e) {
-        // fallback: si no puede consultar DBA_SYS_PRIVS, intentar SESSION_PRIVS
-        try {
-          const sess = await sequelize.query(`SELECT PRIVILEGE FROM SESSION_PRIVS`, { type: QueryTypes.SELECT });
-          systemPrivs = sess.map(s => ({ PRIVILEGE: s.PRIVILEGE, ADMIN_OPTION: null }));
-        } catch (_) {
-          systemPrivs = [];
-        }
+    // Obtener las tablas disponibles
+    const resultados = await sequelize.query(
+      `SELECT TABLE_NAME, GRANTOR, PRIVILEGE FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`,
+      {
+        type: QueryTypes.SELECT,
+        replacements: { usuario: usuario.toUpperCase() }
       }
-
-      // Obtener roles asignados a SYSTEM
-      try {
-        systemRoles = await sequelize.query(
-          `SELECT GRANTED_ROLE, ADMIN_OPTION, DEFAULT_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE = 'SYSTEM' ORDER BY GRANTED_ROLE`,
-          { type: QueryTypes.SELECT }
-        );
-      } catch (e) {
-        // fallback: intentar USER_ROLE_PRIVS (aunque no es ideal para SYSTEM)
-        try {
-          const ur = await sequelize.query(`SELECT GRANTED_ROLE, ADMIN_OPTION, DEFAULT_ROLE FROM USER_ROLE_PRIVS`, { type: QueryTypes.SELECT });
-          systemRoles = ur.map(r => ({ GRANTED_ROLE: r.GRANTED_ROLE, ADMIN_OPTION: r.ADMIN_OPTION, DEFAULT_ROLE: r.DEFAULT_ROLE, GRANTEE: 'SYSTEM' }));
-        } catch (_) {
-          systemRoles = [];
-        }
-      }
-
-    } else {
-      resultados = await sequelize.query(
-        `SELECT TABLE_NAME, GRANTOR, PRIVILEGE FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`,
-        {
-          type: QueryTypes.SELECT,
-          replacements: { usuario: usuario.toUpperCase() }
-        }
-      );
-    }
+    );
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -169,44 +100,35 @@ app.post('/consulta', async (req, res) => {
         <button type="submit" class="view-btn">Ver</button>
       </form>
     </div>
+
     ${resultados.length === 0 ? `
       <div class="alerta">El usuario <b>${usuario}</b> no tiene acceso a ninguna tabla.</div>
     ` : `
-      ${isSystem ? `
-        <div class="success-box">
-          <h3>Privilegios de sistema (SYSTEM)</h3>
-          ${systemPrivs.length > 0 ? `<table><thead><tr><th>PRIVILEGE</th><th>ADMIN_OPTION</th></tr></thead><tbody>${systemPrivs.map(p=>`<tr><td>${p.PRIVILEGE}</td><td>${p.ADMIN_OPTION || ''}</td></tr>`).join('')}</tbody></table>` : `<div class="alerta">No se pudieron recuperar los privilegios de sistema.</div>`}
-          <h3>Roles asignados (SYSTEM)</h3>
-          ${systemRoles.length > 0 ? `<table><thead><tr><th>GRANTED_ROLE</th><th>ADMIN_OPTION</th><th>DEFAULT_ROLE</th></tr></thead><tbody>${systemRoles.map(r=>`<tr><td>${r.GRANTED_ROLE}</td><td>${r.ADMIN_OPTION || ''}</td><td>${r.DEFAULT_ROLE || ''}</td></tr>`).join('')}</tbody></table>` : `<div class="alerta">No se pudieron recuperar roles asignados.</div>`}
-        </div>
-      ` : ''}
-
       <table>
         <thead>
           <tr>
             <th>OWNER</th>
             <th>TABLE_NAME</th>
-            <th>ACCIÓN</th>
+            <th>PRIVILEGE</th>
           </tr>
         </thead>
         <tbody>
-          ${resultados.map(fila => {
-            const owner = fila.GRANTOR || fila.OWNER || '';
-            const table = fila.TABLE_NAME;
-            return `
+          ${resultados.map(fila => `
             <tr>
-              <td>${owner}</td>
-              <td><strong>${table}</strong></td>
+              <td>${fila.GRANTOR}</td>
+              <td><strong>${fila.TABLE_NAME}</strong></td>
               <td>
-                <form action="/tabla/${encodeURIComponent(table)}" method="POST" class="action-form">
-                  <input type="hidden" name="usuario" value="${usuario}">
-                  <input type="hidden" name="password" value="${password}">
-                  <input type="hidden" name="owner" value="${owner}">
-                  <button type="submit" class="view-btn" style="width: auto; padding: 0.5rem 1rem;">👁️ Ver</button>
-                </form>
+                ${fila.PRIVILEGE === 'SELECT' ? `
+                  <form action="/tabla/${encodeURIComponent(fila.TABLE_NAME)}" method="POST" class="action-form">
+                    <input type="hidden" name="usuario" value="${usuario}">
+                    <input type="hidden" name="password" value="${password}">
+                    <input type="hidden" name="owner" value="${fila.GRANTOR}">
+                    <button type="submit" class="view-btn" style="width: auto; padding: 0.5rem 1rem;">👁️ Ver</button>
+                  </form>
+                ` : `<span style="color: #999;">${fila.PRIVILEGE}</span>`}
               </td>
-            </tr>`;
-          }).join('')}
+            </tr>
+          `).join('')}
         </tbody>
       </table>
     `}
@@ -265,16 +187,13 @@ app.post('/consulta', async (req, res) => {
 // Ruta para mostrar las diferentes vistas
 app.post('/consulta/vista', async (req, res) => {
   const { usuario, password, tipo } = req.body;
-  const host = DEFAULT_DB_HOST;
-  const port = DEFAULT_DB_PORT;
-  const service = DEFAULT_DB_SERVICE;
-  const connectString = `${host}:${port}/${service}`;
-
-  const sequelize = new Sequelize(service, usuario, password, {
-    host,
+  const sequelize = new Sequelize('XE', usuario, password, {
+    host: 'localhost',
     dialect: 'oracle',
-    port,
-    dialectOptions: { connectString },
+    port: 1521,
+    dialectOptions: {
+      connectString: 'localhost/XE'
+    },
     logging: false
   });
 
@@ -286,24 +205,13 @@ app.post('/consulta/vista', async (req, res) => {
 
     if (tipo === 'roles') {
       // CONSULTA DE ROLES DEL USUARIO
-      let roles = [];
-      try {
-        roles = await sequelize.query(
-          `SELECT * FROM DBA_ROLE_PRIVS WHERE GRANTEE = :usuario`,
-          {
-            type: QueryTypes.SELECT,
-            replacements: { usuario: usuario.toUpperCase() }
-          }
-        );
-      } catch (err) {
-        // Fallback: si no tiene privilegios para DBA_, usar USER_ROLE_PRIVS (devuelve roles del usuario conectado)
-        if (String(err.message || '').includes('ORA-00942')) {
-          const userRoles = await sequelize.query(`SELECT GRANTED_ROLE, ADMIN_OPTION, DEFAULT_ROLE FROM USER_ROLE_PRIVS`, { type: QueryTypes.SELECT });
-          roles = userRoles.map(r => ({ GRANTEE: usuario.toUpperCase(), GRANTED_ROLE: r.GRANTED_ROLE, ADMIN_OPTION: r.ADMIN_OPTION, DEFAULT_ROLE: r.DEFAULT_ROLE }));
-        } else {
-          throw err;
+      const roles = await sequelize.query(
+        `SELECT * FROM DBA_ROLE_PRIVS WHERE GRANTEE = :usuario`,
+        {
+          type: QueryTypes.SELECT,
+          replacements: { usuario: usuario.toUpperCase() }
         }
-      }
+      );
 
       titulo = `ROLES ASIGNADOS PARA ${usuario.toUpperCase()}`;
       
@@ -335,24 +243,13 @@ app.post('/consulta/vista', async (req, res) => {
 
     } else if (tipo === 'privilegios') {
       // PRIVILEGIOS DEL USUARIO
-      let privilegios = [];
-      try {
-        privilegios = await sequelize.query(
-          `SELECT * FROM DBA_SYS_PRIVS WHERE GRANTEE = :usuario`,
-          {
-            type: QueryTypes.SELECT,
-            replacements: { usuario: usuario.toUpperCase() }
-          }
-        );
-      } catch (err) {
-        // Fallback: si no puede consultar DBA_SYS_PRIVS, usamos SESSION_PRIVS para ver los privilegios efectivos
-        if (String(err.message || '').includes('ORA-00942')) {
-          const sessionPrivs = await sequelize.query(`SELECT PRIVILEGE FROM SESSION_PRIVS`, { type: QueryTypes.SELECT });
-          privilegios = sessionPrivs.map(p => ({ GRANTEE: usuario.toUpperCase(), PRIVILEGE: p.PRIVILEGE, ADMIN_OPTION: null }));
-        } else {
-          throw err;
+      const privilegios = await sequelize.query(
+        `SELECT * FROM DBA_SYS_PRIVS WHERE GRANTEE = :usuario`,
+        {
+          type: QueryTypes.SELECT,
+          replacements: { usuario: usuario.toUpperCase() }
         }
-      }
+      );
 
       titulo = `PRIVILEGIOS DE SISTEMA PARA ${usuario.toUpperCase()}`;
       
@@ -382,13 +279,13 @@ app.post('/consulta/vista', async (req, res) => {
 
     } else if (tipo === 'tablas') {
       // CONTENIDO DE LAS TABLAS
-      const isSystem = String(usuario).toUpperCase() === 'SYSTEM';
-      let tablas = [];
-      if (isSystem) {
-        tablas = await sequelize.query(`SELECT OWNER, TABLE_NAME FROM DBA_TABLES WHERE OWNER NOT IN ('SYS','SYSTEM') AND ROWNUM <= 500`, { type: QueryTypes.SELECT });
-      } else {
-        tablas = await sequelize.query(`SELECT DISTINCT TABLE_NAME, GRANTOR FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`, { type: QueryTypes.SELECT, replacements: { usuario: usuario.toUpperCase() } });
-      }
+      const tablas = await sequelize.query(
+        `SELECT DISTINCT TABLE_NAME, GRANTOR FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`,
+        {
+          type: QueryTypes.SELECT,
+          replacements: { usuario: usuario.toUpperCase() }
+        }
+      );
 
       titulo = `TABLAS DISPONIBLES PARA ${usuario.toUpperCase()}`;
       
@@ -404,16 +301,14 @@ app.post('/consulta/vista', async (req, res) => {
           <tbody>`;
         
         tablas.forEach(tabla => {
-          const owner = tabla.GRANTOR || tabla.OWNER || '';
-          const tableName = tabla.TABLE_NAME;
           contenido += `<tr>
-            <td>${tableName}</td>
-            <td>${owner}</td>
+            <td>${tabla.TABLE_NAME}</td>
+            <td>${tabla.GRANTOR}</td>
             <td>
-              <form action="/tabla/${encodeURIComponent(tableName)}" method="POST" style="display:inline;">
+              <form action="/tabla/${encodeURIComponent(tabla.TABLE_NAME)}" method="POST" style="display:inline;">
                 <input type="hidden" name="usuario" value="${usuario}">
                 <input type="hidden" name="password" value="${password}">
-                <input type="hidden" name="owner" value="${owner}">
+                <input type="hidden" name="owner" value="${tabla.GRANTOR}">
                 <button type="submit" class="view-btn" style="width: auto; padding: 0.5rem 1rem;">👁️ Ver Contenido</button>
               </form>
             </td>
@@ -424,10 +319,6 @@ app.post('/consulta/vista', async (req, res) => {
       } else {
         contenido = `<div class="alerta">El usuario no tiene tablas disponibles.</div>`;
       }
-    } else if (tipo === 'noencontrado') {
-      // PÁGINA: USUARIO NO ENCONTRADO O CONTRASEÑA MAL ESCRITA
-      titulo = 'USUARIO NO ENCONTRADO O SU CONTRASEÑA ESTA MAL ESCRITA';
-      contenido = `<div class="alerta">Usuario no encontrado o su contraseña está mal escrita.</div>`;
     }
 
     const html = `<!DOCTYPE html>
@@ -493,24 +384,20 @@ app.post('/tabla/:tableName', async (req, res) => {
     return res.send(`<h2>Error: Faltan parámetros requeridos</h2>`);
   }
 
-  const host = DEFAULT_DB_HOST;
-  const port = DEFAULT_DB_PORT;
-  const service = DEFAULT_DB_SERVICE;
-  const connectString = `${host}:${port}/${service}`;
-
-  const sequelize = new Sequelize(service, usuario, password, {
-    host,
+  const sequelize = new Sequelize('XE', usuario, password, {
+    host: 'localhost',
     dialect: 'oracle',
-    port,
-    dialectOptions: { connectString },
+    port: 1521,
+    dialectOptions: {
+      connectString: 'localhost/XE'
+    },
     logging: false
   });
 
   try {
     await sequelize.authenticate();
     const registros = await sequelize.query(
-      // Use unquoted OWNER.TABLE and uppercase identifiers; SYSTEM often needs unquoted reference
-      `SELECT * FROM ${owner.toUpperCase()}.${tableName.toUpperCase()} FETCH FIRST 50 ROWS ONLY`,
+      `SELECT * FROM "${owner}"."${tableName}" FETCH FIRST 50 ROWS ONLY`,
       { type: QueryTypes.SELECT }
     );
 
