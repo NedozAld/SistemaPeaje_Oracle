@@ -79,15 +79,51 @@ app.post('/consulta', async (req, res) => {
   try {
     await sequelize.authenticate();
     
-    // Obtener las tablas disponibles
+    // Obtener las tablas disponibles y privilegios
     const isSystem = String(usuario).toUpperCase() === 'SYSTEM';
     let resultados = [];
+    let systemPrivs = [];
+    let systemRoles = [];
+
     if (isSystem) {
-      // SYSTEM normalmente puede consultar DBA_TABLES; mostramos tablas de todos los owners (excepto Oracle internals)
+      // Para SYSTEM mostramos solo tablas de SYS y XDB, y además listamos privilegios y roles de SYSTEM
       resultados = await sequelize.query(
-        `SELECT OWNER, TABLE_NAME FROM DBA_TABLES WHERE OWNER NOT IN ('SYS','SYSTEM') AND ROWNUM <= 500`,
+        `SELECT OWNER, TABLE_NAME FROM DBA_TABLES WHERE OWNER IN ('SYS','XDB') ORDER BY OWNER, TABLE_NAME`,
         { type: QueryTypes.SELECT }
       );
+
+      // Obtener privilegios de sistema asignados a SYSTEM
+      try {
+        systemPrivs = await sequelize.query(
+          `SELECT PRIVILEGE, ADMIN_OPTION FROM DBA_SYS_PRIVS WHERE GRANTEE = 'SYSTEM' ORDER BY PRIVILEGE`,
+          { type: QueryTypes.SELECT }
+        );
+      } catch (e) {
+        // fallback: si no puede consultar DBA_SYS_PRIVS, intentar SESSION_PRIVS
+        try {
+          const sess = await sequelize.query(`SELECT PRIVILEGE FROM SESSION_PRIVS`, { type: QueryTypes.SELECT });
+          systemPrivs = sess.map(s => ({ PRIVILEGE: s.PRIVILEGE, ADMIN_OPTION: null }));
+        } catch (_) {
+          systemPrivs = [];
+        }
+      }
+
+      // Obtener roles asignados a SYSTEM
+      try {
+        systemRoles = await sequelize.query(
+          `SELECT GRANTED_ROLE, ADMIN_OPTION, DEFAULT_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE = 'SYSTEM' ORDER BY GRANTED_ROLE`,
+          { type: QueryTypes.SELECT }
+        );
+      } catch (e) {
+        // fallback: intentar USER_ROLE_PRIVS (aunque no es ideal para SYSTEM)
+        try {
+          const ur = await sequelize.query(`SELECT GRANTED_ROLE, ADMIN_OPTION, DEFAULT_ROLE FROM USER_ROLE_PRIVS`, { type: QueryTypes.SELECT });
+          systemRoles = ur.map(r => ({ GRANTED_ROLE: r.GRANTED_ROLE, ADMIN_OPTION: r.ADMIN_OPTION, DEFAULT_ROLE: r.DEFAULT_ROLE, GRANTEE: 'SYSTEM' }));
+        } catch (_) {
+          systemRoles = [];
+        }
+      }
+
     } else {
       resultados = await sequelize.query(
         `SELECT TABLE_NAME, GRANTOR, PRIVILEGE FROM ALL_TAB_PRIVS WHERE GRANTEE = :usuario`,
@@ -136,6 +172,15 @@ app.post('/consulta', async (req, res) => {
     ${resultados.length === 0 ? `
       <div class="alerta">El usuario <b>${usuario}</b> no tiene acceso a ninguna tabla.</div>
     ` : `
+      ${isSystem ? `
+        <div class="success-box">
+          <h3>Privilegios de sistema (SYSTEM)</h3>
+          ${systemPrivs.length > 0 ? `<table><thead><tr><th>PRIVILEGE</th><th>ADMIN_OPTION</th></tr></thead><tbody>${systemPrivs.map(p=>`<tr><td>${p.PRIVILEGE}</td><td>${p.ADMIN_OPTION || ''}</td></tr>`).join('')}</tbody></table>` : `<div class="alerta">No se pudieron recuperar los privilegios de sistema.</div>`}
+          <h3>Roles asignados (SYSTEM)</h3>
+          ${systemRoles.length > 0 ? `<table><thead><tr><th>GRANTED_ROLE</th><th>ADMIN_OPTION</th><th>DEFAULT_ROLE</th></tr></thead><tbody>${systemRoles.map(r=>`<tr><td>${r.GRANTED_ROLE}</td><td>${r.ADMIN_OPTION || ''}</td><td>${r.DEFAULT_ROLE || ''}</td></tr>`).join('')}</tbody></table>` : `<div class="alerta">No se pudieron recuperar roles asignados.</div>`}
+        </div>
+      ` : ''}
+
       <table>
         <thead>
           <tr>
@@ -148,20 +193,17 @@ app.post('/consulta', async (req, res) => {
           ${resultados.map(fila => {
             const owner = fila.GRANTOR || fila.OWNER || '';
             const table = fila.TABLE_NAME;
-            const privilege = fila.PRIVILEGE || 'SELECT';
             return `
             <tr>
               <td>${owner}</td>
               <td><strong>${table}</strong></td>
               <td>
-                ${privilege === 'SELECT' || isSystem ? `
-                  <form action="/tabla/${encodeURIComponent(table)}" method="POST" class="action-form">
-                    <input type="hidden" name="usuario" value="${usuario}">
-                    <input type="hidden" name="password" value="${password}">
-                    <input type="hidden" name="owner" value="${owner}">
-                    <button type="submit" class="view-btn" style="width: auto; padding: 0.5rem 1rem;">👁️ Ver</button>
-                  </form>
-                ` : `<span style="color: #999;">${privilege}</span>`}
+                <form action="/tabla/${encodeURIComponent(table)}" method="POST" class="action-form">
+                  <input type="hidden" name="usuario" value="${usuario}">
+                  <input type="hidden" name="password" value="${password}">
+                  <input type="hidden" name="owner" value="${owner}">
+                  <button type="submit" class="view-btn" style="width: auto; padding: 0.5rem 1rem;">👁️ Ver</button>
+                </form>
               </td>
             </tr>`;
           }).join('')}
