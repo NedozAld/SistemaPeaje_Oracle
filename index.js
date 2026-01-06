@@ -115,8 +115,7 @@ app.get('/primos', async (req, res) => {
 <body>
   <div class="container py-4">
     <div class="text-center text-white mb-4">
-      <span class="badge badge-soft px-3 py-2">🔐 Sesión HR</span>
-      <h1 class="fw-bold hero-text mt-2">📋 Lista de Números Primos</h1>
+      <h1 class="fw-bold hero-text">📋 Lista de Números Primos</h1>
       <p class="mb-0 opacity-75">Consulta paginada y ordenada de los primos generados</p>
     </div>
 

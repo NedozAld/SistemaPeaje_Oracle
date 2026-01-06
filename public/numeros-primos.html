@@ -20,23 +20,12 @@
 <body>
     <div class="container py-5">
         <div class="text-center text-white mb-4">
-            <span class="badge badge-soft px-3 py-2">🔐 Sesión HR</span>
-            <h1 class="fw-bold hero-text mt-2">🔢 Generador de Números Primos</h1>
-            <p class="mb-0 opacity-75">Genera y almacena primos en Oracle XE (usuario HR)</p>
+            <h1 class="fw-bold hero-text">🔢 Generador de Números Primos</h1>
         </div>
 
-        <div class="row g-4">
-            <div class="col-12 col-lg-5">
-                <div class="glass-card p-4 h-100 text-center">
-                    <h2 class="h5 fw-bold mb-3">Información de conexión</h2>
-                    <div class="badge bg-primary-subtle text-primary-emphasis px-3 py-2 mb-3">👤 Usuario: HR</div>
-                    <p class="muted mb-1">Base de Datos: Oracle XE</p>
-                    <p class="muted mb-0">Tabla: NUMEROS_PRIMOS</p>
-                </div>
-            </div>
-
-            <div class="col-12 col-lg-7">
-                <div class="glass-card p-4 h-100">
+        <div class="row justify-content-center">
+            <div class="col-12 col-lg-8">
+                <div class="glass-card p-4">
                     <h2 class="h5 fw-bold mb-4">📊 Generación de números primos</h2>
                     <form action="/generar-primos" method="POST" novalidate>
                         <div class="mb-3">
@@ -50,17 +39,6 @@
 
                         <button type="submit" class="btn btn-gradient w-100 py-3 fw-bold">✨ Generar números primos</button>
                     </form>
-
-                    <div class="alert alert-primary mt-4 mb-0" role="alert">
-                        <div class="fw-semibold mb-1">ℹ️ Información</div>
-                        <ul class="mb-0 ps-3">
-                            <li>Los números se guardan en la tabla NUMEROS_PRIMOS.</li>
-                            <li>Se usa automáticamente el usuario HR.</li>
-                            <li>Sin duplicados: se genera solo lo que falte.</li>
-                              <li>Resultados paginados de 20 en 20.</li>
-                        </ul>
-                        <div class="muted small mt-2">Asegúrate de tener creada la tabla y el procedimiento en la base.</div>
-                    </div>
                 </div>
             </div>
         </div>
