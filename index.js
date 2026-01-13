@@ -18,16 +18,210 @@ app.use(express.static(path.join(__dirname, 'public')));
 const bootstrapLink = `<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">`;
 
 const estilosGlobales = `<style>
-  body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-  .glass-card { background: rgba(255,255,255,0.93); border-radius: 16px; box-shadow: 0 12px 35px rgba(0,0,0,0.18); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.35); }
-  .section-title { color: #0f172a; font-weight: 700; letter-spacing: 0.5px; }
-  .table thead th { background: #111827; color: #f9fafb; border: none; }
-  .table tbody tr:hover { background: rgba(17,24,39,0.04); }
-  .btn-primary { background: #4f46e5; border: none; }
-  .btn-primary:hover { background: #4338ca; }
-  .badge-soft { background: rgba(79,70,229,0.2); color: #4f46e5; }
-  .nav-tabs .nav-link { color: #4f46e5; }
-  .nav-tabs .nav-link.active { color: #fff; background: #4f46e5; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body { 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+    min-height: 100vh; 
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding-bottom: 2rem;
+  }
+  
+  .glass-card { 
+    background: rgba(255,255,255,0.95); 
+    border-radius: 20px; 
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.5); 
+    backdrop-filter: blur(10px); 
+    border: 1px solid rgba(255,255,255,0.4);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .glass-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 25px 70px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.6);
+  }
+  
+  .section-title { 
+    color: #1e293b; 
+    font-weight: 700; 
+    letter-spacing: -0.5px;
+    margin-bottom: 1.5rem;
+  }
+  
+  .navbar-dark {
+    background: rgba(17,24,39,0.9) !important;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  
+  .navbar-brand {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  
+  .nav-link {
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    margin: 0 4px;
+  }
+  
+  .nav-link:hover {
+    background: rgba(255,255,255,0.1);
+    transform: translateY(-1px);
+  }
+  
+  .table { 
+    border-radius: 12px; 
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  }
+  
+  .table thead th { 
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%); 
+    color: #f9fafb; 
+    border: none;
+    padding: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+  }
+  
+  .table tbody tr { 
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
+  
+  .table tbody tr:hover { 
+    background: rgba(102,126,234,0.08);
+    transform: scale(1.01);
+  }
+  
+  .table tbody td {
+    padding: 1rem;
+    vertical-align: middle;
+  }
+  
+  .btn { 
+    border-radius: 10px; 
+    font-weight: 600;
+    padding: 0.6rem 1.5rem;
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  }
+  
+  .btn-primary { 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+  }
+  
+  .btn-primary:hover { 
+    background: linear-gradient(135deg, #5568d3 0%, #6a4291 100%);
+  }
+  
+  .btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  }
+  
+  .btn-success:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  }
+  
+  .btn-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  }
+  
+  .btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  }
+  
+  .btn-sm {
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+  }
+  
+  .form-control, .form-select {
+    border-radius: 10px;
+    border: 2px solid #e2e8f0;
+    padding: 0.7rem 1rem;
+    transition: all 0.3s ease;
+    font-size: 0.95rem;
+  }
+  
+  .form-control:focus, .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102,126,234,0.1);
+  }
+  
+  .form-label {
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+  }
+  
+  .alert {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  }
+  
+  .alert-info {
+    background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+    color: #0c4a6e;
+  }
+  
+  h1 {
+    font-weight: 800;
+    letter-spacing: -1px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  h2 {
+    font-weight: 700;
+    font-size: 2.5rem;
+  }
+  
+  h3, h5 {
+    font-weight: 600;
+    color: #1e293b;
+  }
+  
+  .badge-soft { 
+    background: rgba(102,126,234,0.15); 
+    color: #667eea;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  
+  .card-stat {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+  }
+  
+  .card-stat:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.15);
+  }
+  
+  @media (max-width: 768px) {
+    .btn { padding: 0.5rem 1rem; font-size: 0.9rem; }
+    h1 { font-size: 1.8rem; }
+    .table { font-size: 0.85rem; }
+  }
 </style>`;
 
 // Función para obtener conexión
@@ -150,17 +344,45 @@ app.get('/pasajes', async (req, res) => {
     try {
         connection = await getConnection();
         
-        const query = `
-            SELECT p.id_pasaje, p.fecha_viaje, r.nombre_ruta, r.precio_base, u.placa, u.capacidad, tp.descripcion, tp.descuento, p.valor_final
+        // Obtener filtros de la URL
+        const filtroRuta = req.query.ruta || '';
+        
+        // Query con filtro opcional por ruta
+        let query = `
+            SELECT p.id_pasaje, p.fecha_viaje, r.id_ruta, r.nombre_ruta, r.precio_base, u.placa, u.capacidad, tp.descripcion, tp.descuento, p.valor_final
             FROM PASAJES p
             JOIN RUTAS r ON p.id_ruta = r.id_ruta
             JOIN UNIDADES u ON p.id_unidad = u.id_unidad
             JOIN TIPOS_PASAJE tp ON p.id_tipo = tp.id_tipo
-            ORDER BY p.fecha_viaje DESC
         `;
 
-        const result = await connection.execute(query, [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+        const params = [];
+        if (filtroRuta) {
+            query += ` WHERE r.id_ruta = :ruta`;
+            params.push(filtroRuta);
+        }
+        
+        query += ` ORDER BY p.fecha_viaje DESC`;
+
+        const result = await connection.execute(
+            query, 
+            filtroRuta ? { ruta: filtroRuta } : [], 
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
         const pasajes = result.rows;
+
+        // Obtener lista de rutas para el filtro
+        const rutasResult = await connection.execute(
+            'SELECT id_ruta, nombre_ruta FROM RUTAS WHERE ESTADO = \'A\' ORDER BY nombre_ruta',
+            [],
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+        const rutas = rutasResult.rows;
+        
+        let optRutas = '<option value="">Todas las rutas</option>';
+        optRutas += rutas.map(r => 
+            `<option value="${r.ID_RUTA}" ${r.ID_RUTA == filtroRuta ? 'selected' : ''}>${r.NOMBRE_RUTA}</option>`
+        ).join('');
 
         let tablaPasajes = '<tr><th>ID</th><th>Fecha</th><th>Ruta</th><th>Placa</th><th>Tipo</th><th>Precio Base</th><th>Descuento</th><th>Valor Final</th><th>Acciones</th></tr>';
         pasajes.forEach(p => {
@@ -205,6 +427,22 @@ app.get('/pasajes', async (req, res) => {
 
   <div class="container mt-5">
     <h1 class="text-white mb-4">📋 Pasajes Registrados (${pasajes.length})</h1>
+    
+    <div class="glass-card p-4 mb-3">
+      <h5 class="mb-3">🔍 Filtros</h5>
+      <form method="GET" action="/pasajes" class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Filtrar por Ruta</label>
+          <select name="ruta" class="form-control">
+            ${optRutas}
+          </select>
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary me-2">Filtrar</button>
+          <a href="/pasajes" class="btn btn-secondary">Limpiar</a>
+        </div>
+      </form>
+    </div>
     
     <div class="glass-card p-4">
       <div class="table-responsive">
@@ -310,9 +548,24 @@ app.get('/crear-pasaje', async (req, res) => {
           <label class="form-label">Fecha</label>
           <input type="date" name="fecha_viaje" class="form-control" required />
         </div>
+
+        <div class="mb-3">
+          <label class="form-label">Precio Base</label>
+          <input type="text" id="precio_base" class="form-control" readonly value="$0.00" style="background-color: #f0f0f0;" />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Descuento</label>
+          <input type="text" id="descuento" class="form-control" readonly value="0%" style="background-color: #f0f0f0;" />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"><strong>Valor Final (Calculado)</strong></label>
+          <input type="text" id="valor_final" class="form-control" readonly value="$0.00" style="background-color: #e8f5e9; font-weight: bold; font-size: 1.1em;" />
+        </div>
         
-        <p class="alert alert-info" style="font-size: 0.9em; margin-top: 1rem;">
-          <strong>⚙️ Nota:</strong> El valor final se calcula automáticamente mediante trigger:<br>
+        <p class="alert alert-info" style="font-size: 0.9em;">
+          <strong>⚙️ Nota:</strong> El valor final se calcula automáticamente mediante trigger Oracle:<br>
           <code>Valor Final = Precio Base - (Precio Base × Descuento%)</code>
         </p>
 
@@ -323,6 +576,45 @@ app.get('/crear-pasaje', async (req, res) => {
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Datos de rutas y tipos
+    const rutas = ${JSON.stringify(rutas.rows)};
+    const tipos = ${JSON.stringify(tipos.rows)};
+
+    const selectRuta = document.querySelector('select[name="id_ruta"]');
+    const selectTipo = document.querySelector('select[name="id_tipo"]');
+    const inputPrecioBase = document.getElementById('precio_base');
+    const inputDescuento = document.getElementById('descuento');
+    const inputValorFinal = document.getElementById('valor_final');
+
+    function calcular() {
+      const rutaId = parseInt(selectRuta.value);
+      const tipoId = parseInt(selectTipo.value);
+
+      if (!rutaId || !tipoId) {
+        inputPrecioBase.value = '$0.00';
+        inputDescuento.value = '0%';
+        inputValorFinal.value = '$0.00';
+        return;
+      }
+
+      const ruta = rutas.find(r => r.ID_RUTA === rutaId);
+      const tipo = tipos.find(t => t.ID_TIPO === tipoId);
+
+      if (ruta && tipo) {
+        const precioBase = parseFloat(ruta.PRECIO_BASE);
+        const descuento = parseFloat(tipo.DESCUENTO);
+        const valorFinal = precioBase - (precioBase * descuento / 100);
+
+        inputPrecioBase.value = '$' + precioBase.toFixed(2);
+        inputDescuento.value = descuento.toFixed(2) + '%';
+        inputValorFinal.value = '$' + valorFinal.toFixed(2);
+      }
+    }
+
+    selectRuta.addEventListener('change', calcular);
+    selectTipo.addEventListener('change', calcular);
+  </script>
 </body>
 </html>`;
 
