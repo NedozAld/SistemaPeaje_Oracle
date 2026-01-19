@@ -1,15 +1,19 @@
 const express = require('express');
 const path = require('path');
 const oracledb = require('oracledb');
+require('dotenv').config();
+
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Configuración
+// Configuración de base de datos con variables de entorno
 const db = {
-    user: 'hr',
-    password: 'hr',
-    connectString: 'localhost:1521/XE'
+    user: process.env.DB_USER || 'hr',
+    password: process.env.DB_PASSWORD || 'hr',
+    connectString: process.env.DB_CONNECTION_STRING || 'localhost:1521/XE'
 };
+
+console.log('🔌 Conectando a Oracle:', db.connectString);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
