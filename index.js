@@ -886,6 +886,9 @@ app.get('/exportar', async (req, res) => {
 app.get('/descargar-csv', async (req, res) => {
     let connection;
     try {
+        const fs = require('fs');
+        const path = require('path');
+        
         connection = await getConnection();
 
         const query = `
@@ -906,9 +909,20 @@ app.get('/descargar-csv', async (req, res) => {
             csv += `${p.ID_PASAJE},"${fecha}","${p.NOMBRE_RUTA}","${p.PLACA}","${p.DESCRIPCION}",${p.VALOR_FINAL}\n`;
         });
 
-        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', 'attachment; filename="pasajes_export.csv"');
-        res.send('\ufeff' + csv);
+        // Guardar en C:\OracleFiles
+        const dirPath = 'C:\\OracleFiles';
+        const fileName = `pasajes_export_${new Date().getTime()}.csv`;
+        const filePath = path.join(dirPath, fileName);
+        
+        // Crear directorio si no existe
+        if (!fs.existsSync(dirPath)) {
+            fs.mkdirSync(dirPath, { recursive: true });
+        }
+        
+        // Escribir archivo
+        fs.writeFileSync(filePath, '\ufeff' + csv, 'utf-8');
+        
+        res.status(200).send(`✅ CSV guardado exitosamente en: ${filePath}`);
     } catch (error) {
         console.error('❌ Error:', error.message);
         res.status(500).send(`Error: ${error.message}`);
